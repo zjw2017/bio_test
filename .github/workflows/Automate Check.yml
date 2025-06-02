@@ -1,0 +1,50 @@
+name: Automate Check
+
+on:
+  workflow_dispatch:
+    inputs:
+      URL:
+        description: "下载地址"
+        type: string
+jobs:
+  check_engine_update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库文件
+        uses: actions/checkout@v4.2.2
+        with:
+          repository: zjw2017/bio_test
+          ref: main
+      - name: 检查容器更新
+        id: get_engine_update
+        run: |
+          sudo apt-get install aria2 p7zip-full jq
+          sudo chmod -R 777 *
+          new_URL="$URL"
+          package_name=$(echo $URL | cut -d"?" -f1 | cut -d"/" -f5)
+          device=$(echo $package_name | cut -d"-" -f1)
+          echo "device=$device">>$GITHUB_ENV
+          aria2c -x16 -j$(nproc) -U "Mozilla/5.0" -d "$GITHUB_WORKSPACE" "$new_URL"
+          "$GITHUB_WORKSPACE"/tools/binary/payload_extract -i "$package_name" -t zip -o . -X product
+          "$GITHUB_WORKSPACE"/tools/binary/extract.erofs -i product.img -X /app/Biometric
+          rm -rf product.img
+          mkdir -p ./newpc/product
+          mv product/* newpc/product
+          rm -rf product
+          sudo 7z a "$GITHUB_WORKSPACE"/Biometric_"$device".zip "$GITHUB_WORKSPACE"/newpc/*
+          rm -rf newpc
+          echo "upload=true" >> $GITHUB_ENV
+          touch file.log
+          echo "Biometric_$device.zip" >file.log
+        env:
+          URL: ${{ inputs.URL }}
+      - name: 上传到 Github Release
+        uses: ncipollo/release-action@v1.16.0
+        with:
+          artifacts: "Biometric_${{ env.device }}.zip"
+          name: "Biometric ${{ env.device }}"
+          tag: "Biometric"
+          bodyFile: "file.log"
+          allowUpdates: true
+          artifactErrorsFailBuild: true
+          makeLatest: true
