@@ -7,19 +7,15 @@ on:
       URL:
         description: "下载地址"
         type: string
-
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
   build:
-    # The type of runner that the job will run on
     runs-on: ubuntu-latest
     steps:
       - name: 检出仓库文件
         uses: actions/checkout@v4.2.2
         with:
           repository: zjw2017/bio_test
-          ref: main
+          ref: master
       - name: 检查容器更新
         id: get_engine_update
         run: |
