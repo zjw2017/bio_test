@@ -1,17 +1,12 @@
-# This is a basic workflow to help you get started with Actions
 
 name: CI
 
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "master" branch
-  push:
-    branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
-
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
+    inputs:
+      URL:
+        description: "下载地址"
+        type: string
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -19,18 +14,42 @@ jobs:
   build:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
-
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
-
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+      - name: 检出仓库文件
+        uses: actions/checkout@v4.2.2
+        with:
+          repository: zjw2017/bio_test
+          ref: main
+      - name: 检查容器更新
+        id: get_engine_update
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          sudo apt-get install aria2 p7zip-full jq
+          sudo chmod -R 777 *
+          new_URL="$URL"
+          package_name=$(echo $URL | cut -d"?" -f1 | cut -d"/" -f5)
+          device=$(echo $package_name | cut -d"-" -f1)
+          echo "device=$device">>$GITHUB_ENV
+          aria2c -x16 -j$(nproc) -U "Mozilla/5.0" -d "$GITHUB_WORKSPACE" "$new_URL"
+          "$GITHUB_WORKSPACE"/tools/binary/payload_extract -i "$package_name" -t zip -o . -X product
+          "$GITHUB_WORKSPACE"/tools/binary/extract.erofs -i product.img -X /app/Biometric
+          rm -rf product.img
+          mkdir -p ./newpc/product
+          mv product/* newpc/product
+          rm -rf product
+          sudo 7z a "$GITHUB_WORKSPACE"/Biometric_"$device".zip "$GITHUB_WORKSPACE"/newpc/*
+          rm -rf newpc
+          echo "upload=true" >> $GITHUB_ENV
+          touch file.log
+          echo "Biometric_$device.zip" >file.log
+        env:
+          URL: ${{ inputs.URL }}
+      - name: 上传到 Github Release
+        uses: ncipollo/release-action@v1.16.0
+        with:
+          artifacts: "Biometric_${{ env.device }}.zip"
+          name: "Biometric ${{ env.device }}"
+          tag: "Biometric"
+          bodyFile: "file.log"
+          allowUpdates: true
+          artifactErrorsFailBuild: true
+          makeLatest: true
